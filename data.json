@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "source": "等待 GitHub Actions 更新",
+  "symbol": "^NDX",
+  "display_symbol": "Nasdaq-100 (^NDX)",
+  "current_price": null,
+  "previous_close": null,
+  "change_percent": null,
+  "updated_at": null,
+  "last_attempt_at": null,
+  "error": "数据尚未更新。部署到 GitHub 后，Actions 会定时写入最新数据。"
+}
