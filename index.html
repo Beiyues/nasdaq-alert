@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">Nasdaq-100 Alert</p>
         <h1>纳斯达克 100 涨跌提醒</h1>
-        <p class="subtitle">公开展示页面。别人打开网址只看行情面板；通知功能仍在你的本地电脑运行。</p>
+        <p class="subtitle">公开展示页面。点击按钮可实时刷新 Nasdaq-100 指数数据；通知功能仍在你的本地电脑运行。</p>
       </div>
       <div class="status-pill" id="dataStatus">读取中</div>
     </section>
@@ -24,7 +24,7 @@
             <p class="label">当前监测</p>
             <h2 id="symbol">^NDX</h2>
           </div>
-          <button id="refreshButton">刷新页面数据</button>
+          <button id="refreshButton">实时刷新</button>
         </div>
         <div class="price-row">
           <div>
@@ -63,7 +63,7 @@
         <div class="channels">
           <div><span>指数</span><b>^NDX</b></div>
           <div><span>来源</span><b id="source">--</b></div>
-          <div><span>更新方式</span><b>静态数据文件</b></div>
+          <div><span>刷新方式</span><b>浏览器实时请求</b></div>
           <div><span>公开访问</span><b>开启</b></div>
         </div>
       </article>
@@ -86,7 +86,7 @@
         </div>
       </div>
       <div id="messageBox" class="message-box">正在加载...</div>
-      <p class="disclaimer">仅供行情提醒，不构成投资建议。Yahoo 数据适合 MVP，不保证生产级实时性。</p>
+      <p class="disclaimer">仅供行情提醒，不构成投资建议。公开接口适合 MVP，不保证生产级实时性。</p>
     </section>
   </main>
   <script src="app.js"></script>
