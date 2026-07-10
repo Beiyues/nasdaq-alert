@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f5f7fb;
   --ink: #17202a;
   --muted: #667085;
@@ -56,6 +56,11 @@ h2 {
   font-size: 22px;
 }
 
+h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
 .subtitle {
   margin: 12px 0 0;
   color: var(--muted);
@@ -94,7 +99,7 @@ h2 {
 
 .price-panel { grid-row: span 2; }
 
-.panel-head {
+.panel-head, .index-head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -112,18 +117,71 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
+.index-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.index-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfcff;
+}
+
+.mini-badge {
+  flex: 0 0 auto;
+  min-width: 68px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--blue);
+  border: 1px solid #c7d7fe;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.mini-badge.up {
+  background: #e8f6ef;
+  color: var(--green);
+  border-color: #bde7d1;
+}
+
+.mini-badge.down {
+  background: #fff1f2;
+  color: var(--red);
+  border-color: #fecdd3;
+}
+
+.mini-badge.warn {
+  background: #fff8e5;
+  color: var(--amber);
+  border-color: #f3d184;
+}
+
 .price-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .price-row > div, .metric {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px;
-  background: #fbfcff;
+  background: #ffffff;
+}
+
+.price-row.compact > div {
+  min-height: 102px;
 }
 
 strong {
@@ -195,8 +253,19 @@ strong {
   font-size: 13px;
 }
 
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .price-panel { grid-row: auto; }
+}
+
 @media (max-width: 780px) {
   .hero, .panel-head { flex-direction: column; }
-  .grid, .price-row, .thresholds { grid-template-columns: 1fr; }
+  .price-row, .thresholds { grid-template-columns: 1fr; }
   .status-pill { align-self: flex-start; }
+}
+
+@media (max-width: 520px) {
+  .index-head { flex-direction: column; }
+  .mini-badge { align-self: flex-start; }
+  strong { font-size: 24px; }
 }

@@ -1,7 +1,27 @@
 ﻿const $ = (id) => document.getElementById(id);
-const SYMBOL = "^NDX";
-const YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?range=5d&interval=1d";
-const PROXY_URL = "https://api.allorigins.win/raw?url=" + encodeURIComponent(YAHOO_URL);
+
+const INDICES = [
+  {
+    key: "ndx",
+    symbol: "^NDX",
+    displaySymbol: "Nasdaq-100 (^NDX)",
+    messageName: "Nasdaq-100"
+  },
+  {
+    key: "spx",
+    symbol: "^GSPC",
+    displaySymbol: "S&P 500 (^GSPC)",
+    messageName: "S&P 500"
+  }
+];
+
+function yahooUrl(symbol) {
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+}
+
+function proxyUrl(url) {
+  return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+}
 
 function fmtNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
@@ -19,14 +39,14 @@ function setMessage(text) {
   $("messageBox").textContent = text;
 }
 
-function normalizeYahooChart(payload, source) {
+function normalizeYahooChart(payload, source, indexConfig) {
   const result = payload && payload.chart && payload.chart.result && payload.chart.result[0];
   if (!result) throw new Error("行情接口没有返回有效数据");
 
   const meta = result.meta || {};
   const quote = result.indicators && result.indicators.quote && result.indicators.quote[0];
   const closes = ((quote && quote.close) || []).filter((v) => v !== null && Number(v) > 0).map(Number);
-  if (closes.length < 2 && !meta.previousClose) throw new Error("收盘价数据不足");
+  if (closes.length < 2 && !meta.previousClose && !meta.chartPreviousClose) throw new Error("收盘价数据不足");
 
   const currentPrice = Number(meta.regularMarketPrice || closes[closes.length - 1]);
   const previousClose = Number(meta.previousClose || meta.chartPreviousClose || closes[closes.length - 2]);
@@ -37,9 +57,11 @@ function normalizeYahooChart(payload, source) {
 
   return {
     ok: true,
+    key: indexConfig.key,
     source,
-    symbol: SYMBOL,
-    display_symbol: "Nasdaq-100 (^NDX)",
+    symbol: indexConfig.symbol,
+    display_symbol: indexConfig.displaySymbol,
+    message_name: indexConfig.messageName,
     current_price: currentPrice,
     previous_close: previousClose,
     change_percent: changePercent,
@@ -54,54 +76,135 @@ async function fetchJson(url) {
   return response.json();
 }
 
-async function fetchLiveData() {
+async function fetchIndexData(indexConfig) {
+  const url = yahooUrl(indexConfig.symbol);
   try {
-    const payload = await fetchJson(YAHOO_URL);
-    return normalizeYahooChart(payload, "Yahoo chart API");
+    const payload = await fetchJson(url);
+    return normalizeYahooChart(payload, "Yahoo chart API", indexConfig);
   } catch (directError) {
-    const payload = await fetchJson(PROXY_URL);
-    const data = normalizeYahooChart(payload, "Yahoo chart API + CORS proxy");
+    const payload = await fetchJson(proxyUrl(url));
+    const data = normalizeYahooChart(payload, "Yahoo chart API + CORS proxy", indexConfig);
     data.proxy_note = directError.message;
     return data;
   }
 }
 
-function render(data) {
-  $("symbol").textContent = data.display_symbol || data.symbol || SYMBOL;
-  $("source").textContent = data.source || "--";
-  $("currentPrice").textContent = fmtNumber(data.current_price);
-  $("previousClose").textContent = fmtNumber(data.previous_close);
+async function fetchLiveData() {
+  const results = await Promise.allSettled(INDICES.map(fetchIndexData));
+  return results.map((result, index) => {
+    const config = INDICES[index];
+    if (result.status === "fulfilled") return result.value;
+    return {
+      ok: false,
+      key: config.key,
+      symbol: config.symbol,
+      display_symbol: config.displaySymbol,
+      message_name: config.messageName,
+      error: result.reason && result.reason.message ? result.reason.message : "刷新失败"
+    };
+  });
+}
 
-  const status = $("dataStatus");
-  status.classList.toggle("warn", !data.ok);
-  status.textContent = data.ok ? "数据已更新" : "数据待更新";
-
-  const changeEl = $("changePercent");
-  if (data.change_percent === null || data.change_percent === undefined) {
-    changeEl.textContent = "--";
-    changeEl.className = "change flat";
-  } else {
-    const change = Number(data.change_percent);
-    changeEl.textContent = (change >= 0 ? "+" : "") + change.toFixed(2) + "%";
-    changeEl.className = "change " + (change > 0 ? "up" : change < 0 ? "down" : "flat");
+function setChange(element, value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    element.textContent = "--";
+    element.className = "change flat";
+    return;
   }
 
-  $("updatedAt").textContent = "数据更新时间：" + fmtTime(data.updated_at);
+  const change = Number(value);
+  element.textContent = (change >= 0 ? "+" : "") + change.toFixed(2) + "%";
+  element.className = "change " + (change > 0 ? "up" : change < 0 ? "down" : "flat");
+}
 
+function renderIndex(data) {
+  const key = data.key;
+  const badge = $(`${key}Badge`);
+  const changeEl = $(`${key}ChangePercent`);
+
+  $(`${key}Symbol`).textContent = data.display_symbol || data.symbol || "--";
+  $(`${key}CurrentPrice`).textContent = fmtNumber(data.current_price);
+  $(`${key}PreviousClose`).textContent = fmtNumber(data.previous_close);
+  setChange(changeEl, data.change_percent);
+  $(`${key}UpdatedAt`).textContent = data.ok ? "数据更新时间：" + fmtTime(data.updated_at) : "暂未获取到最新数据";
+
+  badge.className = "mini-badge";
   if (data.ok) {
-    const extra = data.proxy_note ? `\n说明：直连接口失败，已通过公开代理刷新。` : "";
-    setMessage(`数据读取成功。\n标的：${data.display_symbol || data.symbol}\n当前涨跌幅：${changeEl.textContent}\n更新时间：${fmtTime(data.updated_at)}${extra}`);
+    badge.textContent = "已更新";
+    if (Number(data.change_percent) > 0) badge.classList.add("up");
+    if (Number(data.change_percent) < 0) badge.classList.add("down");
   } else {
-    setMessage(`暂时没有最新数据。\n\n原因：${data.error || "未知错误"}\n\n这是公开静态页面，只负责展示数据；通知功能仍在你的本地电脑运行。`);
+    badge.textContent = "未更新";
+    badge.classList.add("warn");
   }
+}
+
+function renderAll(items) {
+  const dataByKey = new Map(items.map((item) => [item.key, item]));
+  INDICES.forEach((config) => {
+    const data = dataByKey.get(config.key) || {
+      ok: false,
+      key: config.key,
+      symbol: config.symbol,
+      display_symbol: config.displaySymbol,
+      error: "暂无数据"
+    };
+    renderIndex(data);
+  });
+
+  const okItems = items.filter((item) => item.ok);
+  const failedItems = items.filter((item) => !item.ok);
+  const status = $("dataStatus");
+  status.classList.toggle("warn", okItems.length === 0);
+  status.textContent = okItems.length > 0 ? "数据已更新" : "数据待更新";
+
+  const sources = [...new Set(okItems.map((item) => item.source).filter(Boolean))];
+  $("source").textContent = sources.length ? sources.join(" / ") : "--";
+
+  if (okItems.length > 0) {
+    const lines = okItems.map((item) => {
+      const change = item.change_percent >= 0 ? `+${item.change_percent.toFixed(2)}%` : `${item.change_percent.toFixed(2)}%`;
+      return `${item.display_symbol}：${change}，当前 ${fmtNumber(item.current_price)}`;
+    });
+    const failedText = failedItems.length ? `\n\n未更新：${failedItems.map((item) => item.display_symbol).join("、")}，可以稍后再点一次刷新。` : "";
+    setMessage(`数据读取成功。\n${lines.join("\n")}\n更新时间：${fmtTime(okItems[0].updated_at)}${failedText}`);
+  } else {
+    setMessage(`暂时没有最新数据。\n\n原因：${failedItems.map((item) => `${item.display_symbol}：${item.error}`).join("\n")}\n\n这是公开静态页面，只负责展示数据；通知功能仍在你的本地电脑运行。`);
+  }
+}
+
+function renderLegacyCachedData(data) {
+  renderAll([
+    {
+      ok: Boolean(data.ok),
+      key: "ndx",
+      source: data.source,
+      symbol: data.symbol || "^NDX",
+      display_symbol: data.display_symbol || "Nasdaq-100 (^NDX)",
+      current_price: data.current_price,
+      previous_close: data.previous_close,
+      change_percent: data.change_percent,
+      updated_at: data.updated_at,
+      error: data.error
+    }
+  ]);
 }
 
 async function loadCachedData() {
   try {
     const response = await fetch("data.json?ts=" + Date.now(), { cache: "no-store" });
-    render(await response.json());
+    const data = await response.json();
+    if (Array.isArray(data.indices)) renderAll(data.indices);
+    else if (data.indices && typeof data.indices === "object") renderAll(Object.values(data.indices));
+    else renderLegacyCachedData(data);
   } catch (error) {
-    render({ ok: false, symbol: SYMBOL, error: "本地缓存 data.json 读取失败：" + error.message });
+    renderAll(INDICES.map((config) => ({
+      ok: false,
+      key: config.key,
+      symbol: config.symbol,
+      display_symbol: config.displaySymbol,
+      error: "本地缓存 data.json 读取失败：" + error.message
+    })));
   }
 }
 
@@ -110,11 +213,16 @@ async function refreshLive() {
   button.disabled = true;
   button.textContent = "刷新中...";
   $("dataStatus").textContent = "刷新中";
-  setMessage("正在实时请求 Nasdaq-100 数据，请稍等...");
+  INDICES.forEach((config) => {
+    const badge = $(`${config.key}Badge`);
+    badge.textContent = "刷新中";
+    badge.className = "mini-badge warn";
+  });
+  setMessage("正在实时请求 Nasdaq-100 和 S&P 500 数据，请稍等...");
 
   try {
     const data = await fetchLiveData();
-    render(data);
+    renderAll(data);
   } catch (error) {
     setMessage("实时刷新失败：" + error.message + "\n\n我会保留页面上的缓存数据。你可以稍后再点一次刷新。");
     $("dataStatus").textContent = "刷新失败";
@@ -128,3 +236,4 @@ async function refreshLive() {
 $("refreshButton").addEventListener("click", refreshLive);
 loadCachedData();
 setTimeout(refreshLive, 600);
+
