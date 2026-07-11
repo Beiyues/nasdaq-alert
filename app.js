@@ -105,6 +105,15 @@ async function fetchLiveData() {
   });
 }
 
+function fmtSignedPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  const number = Number(value);
+  return (number >= 0 ? "+" : "") + number.toFixed(2) + "%";
+}
+
+function setTone(element, value) {
+  element.className = "change " + (value > 0 ? "up" : value < 0 ? "down" : "flat");
+}
 function setChange(element, value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     element.textContent = "--";
@@ -139,6 +148,57 @@ function renderIndex(data) {
   }
 }
 
+function renderRelativeInsight(dataByKey) {
+  const ndx = dataByKey.get("ndx");
+  const spx = dataByKey.get("spx");
+  const summary = $("relativeSummary");
+  const ndxEl = $("relativeNdx");
+  const spxEl = $("relativeSpx");
+  const spreadEl = $("relativeSpread");
+  const detail = $("relativeDetail");
+
+  if (!ndx || !spx || !ndx.ok || !spx.ok || Number.isNaN(Number(ndx.change_percent)) || Number.isNaN(Number(spx.change_percent))) {
+    summary.textContent = "等待数据刷新";
+    ndxEl.textContent = "--";
+    spxEl.textContent = "--";
+    spreadEl.textContent = "--";
+    detail.textContent = "刷新后会自动判断科技股今天是强于还是弱于大盘。";
+    setTone(summary, 0);
+    return null;
+  }
+
+  const ndxChange = Number(ndx.change_percent);
+  const spxChange = Number(spx.change_percent);
+  const spread = ndxChange - spxChange;
+  const absSpread = Math.abs(spread).toFixed(2);
+
+  ndxEl.textContent = fmtSignedPercent(ndxChange);
+  spxEl.textContent = fmtSignedPercent(spxChange);
+  spreadEl.textContent = (spread >= 0 ? "+" : "") + spread.toFixed(2) + " 个百分点";
+  setTone(ndxEl, ndxChange);
+  setTone(spxEl, spxChange);
+  setTone(spreadEl, spread);
+
+  if (Math.abs(spread) < 0.15) {
+    summary.textContent = "科技股与大盘接近";
+    detail.textContent = `纳指 100 与标普 500 的涨跌幅只差 ${absSpread} 个百分点，今天表现比较接近。`;
+    setTone(summary, 0);
+  } else if (spread > 0) {
+    summary.textContent = "科技股强于大盘";
+    detail.textContent = `纳指 100 跑赢标普 500 ${absSpread} 个百分点，说明科技/成长方向今天更强。`;
+    setTone(summary, 1);
+  } else {
+    summary.textContent = "科技股弱于大盘";
+    detail.textContent = `纳指 100 跑输标普 500 ${absSpread} 个百分点，说明科技/成长方向今天弱于整体市场。`;
+    setTone(summary, -1);
+  }
+
+  return {
+    spread,
+    summary: summary.textContent,
+    detail: detail.textContent
+  };
+}
 function renderAll(items) {
   const dataByKey = new Map(items.map((item) => [item.key, item]));
   INDICES.forEach((config) => {
@@ -152,6 +212,7 @@ function renderAll(items) {
     renderIndex(data);
   });
 
+  const relativeInsight = renderRelativeInsight(dataByKey);
   const okItems = items.filter((item) => item.ok);
   const failedItems = items.filter((item) => !item.ok);
   const status = $("dataStatus");
@@ -167,7 +228,8 @@ function renderAll(items) {
       return `${item.display_symbol}：${change}，当前 ${fmtNumber(item.current_price)}`;
     });
     const failedText = failedItems.length ? `\n\n未更新：${failedItems.map((item) => item.display_symbol).join("、")}，可以稍后再点一次刷新。` : "";
-    setMessage(`数据读取成功。\n${lines.join("\n")}\n更新时间：${fmtTime(okItems[0].updated_at)}${failedText}`);
+    const insightText = relativeInsight ? `\n\n相对表现：${relativeInsight.summary}。${relativeInsight.detail}` : "";
+    setMessage(`数据读取成功。\n${lines.join("\n")}\n更新时间：${fmtTime(okItems[0].updated_at)}${insightText}${failedText}`);
   } else {
     setMessage(`暂时没有最新数据。\n\n原因：${failedItems.map((item) => `${item.display_symbol}：${item.error}`).join("\n")}\n\n这是公开静态页面，只负责展示数据；通知功能仍在你的本地电脑运行。`);
   }
@@ -236,4 +298,5 @@ async function refreshLive() {
 $("refreshButton").addEventListener("click", refreshLive);
 loadCachedData();
 setTimeout(refreshLive, 600);
+
 

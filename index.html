@@ -95,6 +95,26 @@
         <p class="hint">这是公开展示页，只负责给别人看；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
       </article>
 
+      <article class="panel insight-panel">
+        <p class="label">相对表现</p>
+        <h2 id="relativeSummary">等待数据刷新</h2>
+        <div class="relative-grid">
+          <div>
+            <span>纳指 100</span>
+            <strong id="relativeNdx">--</strong>
+          </div>
+          <div>
+            <span>标普 500 / 大盘</span>
+            <strong id="relativeSpx">--</strong>
+          </div>
+        </div>
+        <div class="relative-detail">
+          <span>强弱差</span>
+          <b id="relativeSpread">--</b>
+        </div>
+        <p class="hint" id="relativeDetail">刷新后会自动判断科技股今天是强于还是弱于大盘。</p>
+      </article>
+
       <article class="panel">
         <p class="label">数据源</p>
         <div class="channels">
@@ -129,4 +149,5 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
