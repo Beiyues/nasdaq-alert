@@ -95,6 +95,17 @@
         <p class="hint">这是公开展示页，只负责给别人看；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
       </article>
 
+      <article class="panel market-panel">
+        <p class="label">市场状态</p>
+        <h2 id="marketStatusText" class="blue-text">计算中</h2>
+        <div class="market-state-list">
+          <div><span>原因</span><b id="marketReason" class="blue-text">--</b></div>
+          <div><span>下次开盘</span><b id="nextOpenTime" class="blue-text">--</b></div>
+          <div><span>当前美东时间</span><b id="marketEtTime">--</b></div>
+        </div>
+        <p class="hint blue-hint" id="marketHint">页面会按美股常规交易时段自动判断状态。</p>
+      </article>
+
       <article class="panel insight-panel">
         <p class="label">相对表现</p>
         <h2 id="relativeSummary">等待数据刷新</h2>
@@ -149,5 +160,6 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
 

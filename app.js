@@ -38,6 +38,138 @@ function fmtTime(value) {
 function setMessage(text) {
   $("messageBox").textContent = text;
 }
+const MARKET_TIME_ZONE = "America/New_York";
+const BEIJING_TIME_ZONE = "Asia/Shanghai";
+const MARKET_OPEN_MINUTES = 9 * 60 + 30;
+const MARKET_CLOSE_MINUTES = 16 * 60;
+const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function getZonedParts(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const hour = Number(parts.hour) % 24;
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour,
+    minute: Number(parts.minute),
+    weekday: WEEKDAY_INDEX[parts.weekday]
+  };
+}
+
+function getTimeZoneOffsetMs(timeZone, date) {
+  const parts = getZonedParts(date, timeZone);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  return asUtc - date.getTime();
+}
+
+function makeZonedDate(timeZone, year, month, day, hour, minute) {
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const firstOffset = getTimeZoneOffsetMs(timeZone, utcGuess);
+  const firstPass = new Date(utcGuess.getTime() - firstOffset);
+  const secondOffset = getTimeZoneOffsetMs(timeZone, firstPass);
+  return new Date(utcGuess.getTime() - secondOffset);
+}
+
+function isTradingWeekday(parts) {
+  return parts.weekday >= 1 && parts.weekday <= 5;
+}
+
+function formatBeijingTime(date) {
+  return date.toLocaleString("zh-CN", {
+    timeZone: BEIJING_TIME_ZONE,
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+}
+
+function formatEasternTime(date) {
+  return date.toLocaleString("zh-CN", {
+    timeZone: MARKET_TIME_ZONE,
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+}
+
+function findNextMarketOpen(now) {
+  const base = getZonedParts(now, MARKET_TIME_ZONE);
+  for (let offset = 0; offset < 10; offset += 1) {
+    const candidate = makeZonedDate(MARKET_TIME_ZONE, base.year, base.month, base.day + offset, 9, 30);
+    const candidateParts = getZonedParts(candidate, MARKET_TIME_ZONE);
+    if (isTradingWeekday(candidateParts) && candidate > now) return candidate;
+  }
+  return null;
+}
+
+function getMarketStatus(now = new Date()) {
+  const parts = getZonedParts(now, MARKET_TIME_ZONE);
+  const minutes = parts.hour * 60 + parts.minute;
+  const nextOpen = findNextMarketOpen(now);
+
+  if (!isTradingWeekday(parts)) {
+    return {
+      status: "美股休市",
+      reason: "当前为周末",
+      nextOpen,
+      hint: "周末行情通常不会实时变化，页面数据可能停留在上一个交易日。"
+    };
+  }
+
+  if (minutes < MARKET_OPEN_MINUTES) {
+    return {
+      status: "盘前未开盘",
+      reason: "未到常规交易时段",
+      nextOpen,
+      hint: "常规交易开始后，价格变化会更接近实时行情。"
+    };
+  }
+
+  if (minutes >= MARKET_OPEN_MINUTES && minutes < MARKET_CLOSE_MINUTES) {
+    const closeTime = makeZonedDate(MARKET_TIME_ZONE, parts.year, parts.month, parts.day, 16, 0);
+    return {
+      status: "美股交易中",
+      reason: "常规交易时段",
+      nextOpen: closeTime,
+      nextOpenLabel: "今日收盘",
+      hint: "当前处于美股常规交易时段，点击按钮可以刷新最新数据。"
+    };
+  }
+
+  return {
+    status: "美股已收盘",
+    reason: "今日常规交易结束",
+    nextOpen,
+    hint: "收盘后价格通常变化较少，下一次明显更新通常在下个交易日开盘后。"
+  };
+}
+
+function renderMarketStatus() {
+  const market = getMarketStatus();
+  const label = market.nextOpenLabel || "下次开盘";
+  $("marketStatusText").textContent = market.status;
+  $("marketReason").textContent = market.reason;
+  $("nextOpenTime").textContent = market.nextOpen ? `${label}：北京时间 ${formatBeijingTime(market.nextOpen)}` : "--";
+  $("marketEtTime").textContent = formatEasternTime(new Date());
+  $("marketHint").textContent = market.hint;
+}
 
 function normalizeYahooChart(payload, source, indexConfig) {
   const result = payload && payload.chart && payload.chart.result && payload.chart.result[0];
@@ -296,7 +428,10 @@ async function refreshLive() {
 }
 
 $("refreshButton").addEventListener("click", refreshLive);
+renderMarketStatus();
+setInterval(renderMarketStatus, 60000);
 loadCachedData();
 setTimeout(refreshLive, 600);
+
 
 
