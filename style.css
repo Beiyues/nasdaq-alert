@@ -184,6 +184,73 @@ button:disabled {
   min-height: 102px;
 }
 
+.sparkline-card {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.sparkline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sparkline-head span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sparkline-head b {
+  font-size: 15px;
+  text-align: right;
+}
+
+.sparkline {
+  height: 76px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+  overflow: hidden;
+}
+
+.sparkline svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sparkline-grid {
+  fill: none;
+  stroke: #d8dee9;
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.sparkline-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sparkline-line.up { stroke: var(--green); }
+.sparkline-line.down { stroke: var(--red); }
+.sparkline-line.flat { stroke: var(--amber); }
+
+.sparkline-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+
 strong {
   display: block;
   font-size: 26px;
@@ -346,6 +413,8 @@ strong {
   .mini-badge { align-self: flex-start; }
   strong { font-size: 24px; }
 }
+
+
 
 
 

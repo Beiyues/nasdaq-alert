@@ -186,6 +186,7 @@ function normalizeYahooChart(payload, source, indexConfig) {
 
   const changePercent = ((currentPrice - previousClose) / previousClose) * 100;
   const timestamp = meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString() : new Date().toISOString();
+  const recentCloses = closes.slice(-5);
 
   return {
     ok: true,
@@ -197,6 +198,7 @@ function normalizeYahooChart(payload, source, indexConfig) {
     current_price: currentPrice,
     previous_close: previousClose,
     change_percent: changePercent,
+    recent_closes: recentCloses,
     updated_at: timestamp,
     error: null
   };
@@ -246,6 +248,49 @@ function fmtSignedPercent(value) {
 function setTone(element, value) {
   element.className = "change " + (value > 0 ? "up" : value < 0 ? "down" : "flat");
 }
+
+function renderSparkline(key, values) {
+  const container = $(`${key}Sparkline`);
+  const trend = $(`${key}SparklineTrend`);
+  const prices = (values || []).map(Number).filter((value) => Number.isFinite(value) && value > 0).slice(-5);
+
+  if (!container || !trend) return;
+
+  if (prices.length < 2) {
+    container.innerHTML = `<div class="sparkline-empty">等待数据</div>`;
+    trend.textContent = "--";
+    trend.className = "change flat";
+    return;
+  }
+
+  const width = 240;
+  const height = 70;
+  const padding = 8;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const points = prices.map((price, index) => {
+    const x = padding + (index * (width - padding * 2)) / (prices.length - 1);
+    const y = height - padding - ((price - min) / range) * (height - padding * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  const first = prices[0];
+  const last = prices[prices.length - 1];
+  const changePercent = ((last - first) / first) * 100;
+  const tone = changePercent > 0 ? "up" : changePercent < 0 ? "down" : "flat";
+  const label = fmtSignedPercent(changePercent);
+
+  trend.textContent = label;
+  trend.className = `change ${tone}`;
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="最近 5 日走势 ${label}" preserveAspectRatio="none">
+      <polyline class="sparkline-grid" points="${padding},${height / 2} ${width - padding},${height / 2}"></polyline>
+      <polyline class="sparkline-line ${tone}" points="${points}"></polyline>
+    </svg>
+  `;
+}
+
 function setChange(element, value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     element.textContent = "--";
@@ -268,6 +313,7 @@ function renderIndex(data) {
   $(`${key}PreviousClose`).textContent = fmtNumber(data.previous_close);
   setChange(changeEl, data.change_percent);
   $(`${key}UpdatedAt`).textContent = data.ok ? "数据更新时间：" + fmtTime(data.updated_at) : "暂未获取到最新数据";
+  renderSparkline(key, data.recent_closes);
 
   badge.className = "mini-badge";
   if (data.ok) {
@@ -378,6 +424,7 @@ function renderLegacyCachedData(data) {
       current_price: data.current_price,
       previous_close: data.previous_close,
       change_percent: data.change_percent,
+      recent_closes: data.recent_closes,
       updated_at: data.updated_at,
       error: data.error
     }
@@ -432,6 +479,9 @@ renderMarketStatus();
 setInterval(renderMarketStatus, 60000);
 loadCachedData();
 setTimeout(refreshLive, 600);
+
+
+
 
 
 
