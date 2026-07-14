@@ -1,4 +1,6 @@
 ﻿const $ = (id) => document.getElementById(id);
+const LIVE_CACHE_KEY = "nasdaq-alert-live-data-v2";
+const FETCH_TIMEOUT_MS = 4500;
 
 const INDICES = [
   {
@@ -38,6 +40,38 @@ function fmtTime(value) {
 function setMessage(text) {
   $("messageBox").textContent = text;
 }
+function saveLiveCache(items) {
+  const okItems = items.filter((item) => item.ok);
+  if (!okItems.length) return;
+  try {
+    const merged = new Map();
+    const existing = JSON.parse(localStorage.getItem(LIVE_CACHE_KEY) || "null");
+    if (existing && Array.isArray(existing.indices)) {
+      existing.indices.forEach((item) => merged.set(item.key, item));
+    }
+    okItems.forEach((item) => merged.set(item.key, item));
+    localStorage.setItem(LIVE_CACHE_KEY, JSON.stringify({
+      saved_at: new Date().toISOString(),
+      indices: Array.from(merged.values())
+    }));
+  } catch (error) {
+    // Local storage can be disabled in private browsing; ignore cache failures.
+  }
+}
+
+function loadLiveCache() {
+  try {
+    const raw = localStorage.getItem(LIVE_CACHE_KEY);
+    if (!raw) return false;
+    const cached = JSON.parse(raw);
+    if (!cached || !Array.isArray(cached.indices) || !cached.indices.length) return false;
+    renderAll(cached.indices, { fromCache: true, savedAt: cached.saved_at });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 const MARKET_TIME_ZONE = "America/New_York";
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
@@ -204,22 +238,29 @@ function normalizeYahooChart(payload, source, indexConfig) {
   };
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) throw new Error(`请求失败：${response.status}`);
-  return response.json();
+async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!response.ok) throw new Error(`请求失败：${response.status}`);
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function fetchIndexData(indexConfig) {
   const url = yahooUrl(indexConfig.symbol);
+  const attempts = proxyUrls(url).map((candidate) => (
+    fetchJson(candidate.url).then((payload) => normalizeYahooChart(payload, candidate.source, indexConfig))
+  ));
+
   try {
-    const payload = await fetchJson(url);
-    return normalizeYahooChart(payload, "Yahoo chart API", indexConfig);
-  } catch (directError) {
-    const payload = await fetchJson(proxyUrl(url));
-    const data = normalizeYahooChart(payload, "Yahoo chart API + CORS proxy", indexConfig);
-    data.proxy_note = directError.message;
-    return data;
+    return await Promise.any(attempts);
+  } catch (error) {
+    const messages = error && error.errors ? error.errors.map((item) => item.message).filter(Boolean) : [];
+    throw new Error(messages[0] || "行情接口暂时不可用");
   }
 }
 
@@ -377,7 +418,7 @@ function renderRelativeInsight(dataByKey) {
     detail: detail.textContent
   };
 }
-function renderAll(items) {
+function renderAll(items, options = {}) {
   const dataByKey = new Map(items.map((item) => [item.key, item]));
   INDICES.forEach((config) => {
     const data = dataByKey.get(config.key) || {
@@ -407,7 +448,8 @@ function renderAll(items) {
     });
     const failedText = failedItems.length ? `\n\n未更新：${failedItems.map((item) => item.display_symbol).join("、")}，可以稍后再点一次刷新。` : "";
     const insightText = relativeInsight ? `\n\n相对表现：${relativeInsight.summary}。${relativeInsight.detail}` : "";
-    setMessage(`数据读取成功。\n${lines.join("\n")}\n更新时间：${fmtTime(okItems[0].updated_at)}${insightText}${failedText}`);
+    const cacheText = options.fromCache ? `\n\n已先显示本机缓存，正在后台刷新最新行情。缓存时间：${fmtTime(options.savedAt)}` : "";
+    setMessage(`数据读取成功。\n${lines.join("\n")}\n更新时间：${fmtTime(okItems[0].updated_at)}${insightText}${cacheText}${failedText}`);
   } else {
     setMessage(`暂时没有最新数据。\n\n原因：${failedItems.map((item) => `${item.display_symbol}：${item.error}`).join("\n")}\n\n这是公开静态页面，只负责展示数据；通知功能仍在你的本地电脑运行。`);
   }
@@ -462,8 +504,12 @@ async function refreshLive() {
   setMessage("正在实时请求 Nasdaq-100 和 S&P 500 数据，请稍等...");
 
   try {
+    const startedAt = performance.now();
     const data = await fetchLiveData();
+    saveLiveCache(data);
     renderAll(data);
+    const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+    setMessage($("messageBox").textContent + `\n\n刷新耗时：${elapsedSeconds} 秒。`);
   } catch (error) {
     setMessage("实时刷新失败：" + error.message + "\n\n我会保留页面上的缓存数据。你可以稍后再点一次刷新。");
     $("dataStatus").textContent = "刷新失败";
@@ -477,8 +523,11 @@ async function refreshLive() {
 $("refreshButton").addEventListener("click", refreshLive);
 renderMarketStatus();
 setInterval(renderMarketStatus, 60000);
-loadCachedData();
-setTimeout(refreshLive, 600);
+if (!loadLiveCache()) loadCachedData();
+setTimeout(refreshLive, 80);
+
+
+
 
 
 
