@@ -1,6 +1,6 @@
 ﻿const $ = (id) => document.getElementById(id);
 const LIVE_CACHE_KEY = "nasdaq-alert-live-data-v2";
-const FETCH_TIMEOUT_MS = 4500;
+const FETCH_TIMEOUT_MS = 8000;
 
 const INDICES = [
   {
@@ -23,6 +23,14 @@ function yahooUrl(symbol) {
 
 function proxyUrl(url) {
   return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+}
+
+function proxyUrls(url) {
+  return [
+    { url, source: "Yahoo chart API" },
+    { url: proxyUrl(url), source: "Yahoo chart API + AllOrigins proxy" },
+    { url: "https://corsproxy.io/?" + encodeURIComponent(url), source: "Yahoo chart API + CORS proxy" }
+  ];
 }
 
 function fmtNumber(value) {
@@ -252,16 +260,19 @@ async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
 
 async function fetchIndexData(indexConfig) {
   const url = yahooUrl(indexConfig.symbol);
-  const attempts = proxyUrls(url).map((candidate) => (
-    fetchJson(candidate.url).then((payload) => normalizeYahooChart(payload, candidate.source, indexConfig))
-  ));
+  const candidates = proxyUrls(url);
+  const errors = [];
 
-  try {
-    return await Promise.any(attempts);
-  } catch (error) {
-    const messages = error && error.errors ? error.errors.map((item) => item.message).filter(Boolean) : [];
-    throw new Error(messages[0] || "行情接口暂时不可用");
+  for (const candidate of candidates) {
+    try {
+      const payload = await fetchJson(candidate.url);
+      return normalizeYahooChart(payload, candidate.source, indexConfig);
+    } catch (error) {
+      errors.push(`${candidate.source}: ${error.message}`);
+    }
   }
+
+  throw new Error(errors[0] || "行情接口暂时不可用");
 }
 
 async function fetchLiveData() {
@@ -525,6 +536,9 @@ renderMarketStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
+
+
 
 
 
