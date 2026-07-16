@@ -48,20 +48,62 @@ function fmtTime(value) {
 function setMessage(text) {
   $("messageBox").textContent = text;
 }
+function getLiveCache() {
+  try {
+    const raw = localStorage.getItem(LIVE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function updateCacheStatus(state, savedAt) {
+  const status = $("cacheStatus");
+  const hint = $("cacheHint");
+  if (!status) return;
+
+  const cache = savedAt ? { saved_at: savedAt } : getLiveCache();
+  if (state === "cleared") {
+    status.textContent = "已清除";
+    if (hint) hint.textContent = "本机缓存已清除，下次打开会重新请求最新数据。";
+    return;
+  }
+
+  if (cache && cache.saved_at) {
+    status.textContent = "已缓存：" + fmtTime(cache.saved_at);
+    if (hint) hint.textContent = "缓存只保存在当前浏览器，不会写入 GitHub，也不会同步给别人。";
+  } else {
+    status.textContent = "暂无缓存";
+    if (hint) hint.textContent = "首次刷新成功后，浏览器会自动保存一份轻量缓存。";
+  }
+}
+
+function clearLiveCache() {
+  try {
+    localStorage.removeItem(LIVE_CACHE_KEY);
+  } catch (error) {
+    // Ignore local storage failures.
+  }
+  updateCacheStatus("cleared");
+  setMessage("本机缓存已清除。\n\n这只会清除当前浏览器里的行情缓存，不会影响 GitHub 页面，也不会影响别人打开网页。你可以点击实时刷新重新写入缓存。");
+}
+
 function saveLiveCache(items) {
   const okItems = items.filter((item) => item.ok);
   if (!okItems.length) return;
   try {
     const merged = new Map();
-    const existing = JSON.parse(localStorage.getItem(LIVE_CACHE_KEY) || "null");
+    const existing = getLiveCache();
     if (existing && Array.isArray(existing.indices)) {
       existing.indices.forEach((item) => merged.set(item.key, item));
     }
     okItems.forEach((item) => merged.set(item.key, item));
+    const savedAt = new Date().toISOString();
     localStorage.setItem(LIVE_CACHE_KEY, JSON.stringify({
-      saved_at: new Date().toISOString(),
+      saved_at: savedAt,
       indices: Array.from(merged.values())
     }));
+    updateCacheStatus("saved", savedAt);
   } catch (error) {
     // Local storage can be disabled in private browsing; ignore cache failures.
   }
@@ -69,17 +111,15 @@ function saveLiveCache(items) {
 
 function loadLiveCache() {
   try {
-    const raw = localStorage.getItem(LIVE_CACHE_KEY);
-    if (!raw) return false;
-    const cached = JSON.parse(raw);
+    const cached = getLiveCache();
     if (!cached || !Array.isArray(cached.indices) || !cached.indices.length) return false;
     renderAll(cached.indices, { fromCache: true, savedAt: cached.saved_at });
+    updateCacheStatus("loaded", cached.saved_at);
     return true;
   } catch (error) {
     return false;
   }
 }
-
 const MARKET_TIME_ZONE = "America/New_York";
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
@@ -532,10 +572,15 @@ async function refreshLive() {
 }
 
 $("refreshButton").addEventListener("click", refreshLive);
+const clearCacheButton = $("clearCacheButton");
+if (clearCacheButton) clearCacheButton.addEventListener("click", clearLiveCache);
 renderMarketStatus();
+updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
+
 
 
 

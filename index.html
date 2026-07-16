@@ -146,7 +146,8 @@
           <div><span>指数</span><b>^NDX / ^GSPC</b></div>
           <div><span>来源</span><b id="source">--</b></div>
           <div><span>刷新方式</span><b>直连优先 + 本地缓存</b></div>
-          <div><span>公开访问</span><b>开启</b></div>
+                    <div><span>缓存状态</span><b id="cacheStatus">检测中</b></div>
+<div><span>公开访问</span><b>开启</b></div>
         </div>
       </article>
 
@@ -157,6 +158,8 @@
           <div><span>后端</span><b>无，纯静态</b></div>
           <div><span>通知</span><b>本地运行</b></div>
         </div>
+        <button id="clearCacheButton" class="secondary-button" type="button">清除本机缓存</button>
+        <p class="hint blue-hint" id="cacheHint">缓存只保存在当前浏览器，不会写入 GitHub。</p>
       </article>
     </section>
 
@@ -174,6 +177,8 @@
   <script src="app.js"></script>
 </body>
 </html>
+
+
 
 
 

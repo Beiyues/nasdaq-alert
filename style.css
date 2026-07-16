@@ -122,6 +122,19 @@ button:disabled {
   opacity: .72;
 }
 
+.secondary-button {
+  width: 100%;
+  margin-top: 14px;
+  background: #eef4ff;
+  color: var(--blue);
+  border: 1px solid #c7d7fe;
+}
+
+.secondary-button:hover {
+  background: #dfeaff;
+}
+
+
 .index-list {
   display: grid;
   gap: 14px;
@@ -413,6 +426,8 @@ strong {
   .mini-badge { align-self: flex-start; }
   strong { font-size: 24px; }
 }
+
+
 
 
 

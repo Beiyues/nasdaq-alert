@@ -1,12 +1,48 @@
 {
-  "ok": false,
-  "source": "等待 GitHub Actions 更新",
-  "symbol": "^NDX",
-  "display_symbol": "Nasdaq-100 (^NDX)",
-  "current_price": null,
-  "previous_close": null,
-  "change_percent": null,
-  "updated_at": null,
-  "last_attempt_at": null,
-  "error": "数据尚未更新。部署到 GitHub 后，Actions 会定时写入最新数据。"
+  "ok": true,
+  "source": "GitHub Actions shared cache",
+  "updated_at": "2026-07-15T21:18:46+00:00",
+  "last_attempt_at": "2026-07-16T06:33:41.646142+00:00",
+  "indices": [
+    {
+      "ok": true,
+      "key": "ndx",
+      "source": "GitHub Actions shared cache / Yahoo chart API",
+      "symbol": "^NDX",
+      "display_symbol": "Nasdaq-100 (^NDX)",
+      "message_name": "Nasdaq-100",
+      "current_price": 29502.6,
+      "previous_close": 29252.56,
+      "change_percent": 0.85,
+      "recent_closes": [
+        29727.1,
+        29825.11,
+        29264.1,
+        29586.29,
+        29502.6
+      ],
+      "updated_at": "2026-07-15T21:15:59+00:00",
+      "error": null
+    },
+    {
+      "ok": true,
+      "key": "spx",
+      "source": "GitHub Actions shared cache / Yahoo chart API",
+      "symbol": "^GSPC",
+      "display_symbol": "S&P 500 (^GSPC)",
+      "message_name": "S&P 500",
+      "current_price": 7572.4,
+      "previous_close": 7482.71,
+      "change_percent": 1.2,
+      "recent_closes": [
+        7543.64,
+        7575.39,
+        7515.34,
+        7543.59,
+        7572.4
+      ],
+      "updated_at": "2026-07-15T21:18:46+00:00",
+      "error": null
+    }
+  ]
 }
