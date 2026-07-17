@@ -1,6 +1,10 @@
 ﻿const $ = (id) => document.getElementById(id);
 const LIVE_CACHE_KEY = "nasdaq-alert-live-data-v2";
+const AGENT_MEMORY_KEY = "nasdaq-alert-agent-memory-v1";
 const FETCH_TIMEOUT_MS = 8000;
+let latestAgentItems = [];
+let latestAgentOptions = {};
+let latestRelativeInsight = null;
 
 const INDICES = [
   {
@@ -469,6 +473,211 @@ function renderRelativeInsight(dataByKey) {
     detail: detail.textContent
   };
 }
+function describeAgentAge(updatedAt) {
+  if (!updatedAt) return "暂无更新时间";
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) return "更新时间格式异常";
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (minutes < 2) return "刚刚更新";
+  if (minutes < 60) return `${minutes} 分钟前更新`;
+  return `${Math.round(minutes / 60)} 小时前更新`;
+}
+
+function setAgentStep(id, text, tone = "") {
+  const element = $(id);
+  if (!element) return;
+  element.textContent = text;
+  element.className = tone ? `agent-tone ${tone}` : "";
+}
+
+function getAgentMemory() {
+  try {
+    const raw = localStorage.getItem(AGENT_MEMORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveAgentMemoryEntry(entry) {
+  const history = [entry, ...getAgentMemory()].slice(0, 5);
+  try {
+    localStorage.setItem(AGENT_MEMORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    // Ignore storage failures; the Agent can still show a one-time check.
+  }
+  return history;
+}
+
+function getAgentSnapshot(items, relativeInsight, options = {}) {
+  const ndx = items.find((item) => item.key === "ndx");
+  const spx = items.find((item) => item.key === "spx");
+  if (!ndx || !ndx.ok || Number.isNaN(Number(ndx.change_percent))) return null;
+
+  return {
+    checked_at: new Date().toISOString(),
+    data_updated_at: ndx.updated_at || null,
+    ndx_change: Number(ndx.change_percent),
+    ndx_price: Number(ndx.current_price),
+    spx_change: spx && spx.ok && !Number.isNaN(Number(spx.change_percent)) ? Number(spx.change_percent) : null,
+    relative_summary: relativeInsight ? relativeInsight.summary : "暂无相对表现",
+    market_status: getMarketStatus().status,
+    source: options.fromCache ? "本机缓存" : "实时/页面数据"
+  };
+}
+
+function renderAgentMemory(snapshot = null, history = getAgentMemory(), compareHistory = history) {
+  const lastAt = $("agentLastCheckAt");
+  const lastNdx = $("agentLastNdx");
+  const deltaEl = $("agentMemoryDelta");
+  const note = $("agentMemoryNote");
+  if (!lastAt || !lastNdx || !deltaEl || !note) return;
+
+  const last = history[0];
+  if (last) {
+    lastAt.textContent = fmtTime(last.checked_at);
+    lastNdx.textContent = fmtSignedPercent(last.ndx_change);
+    lastNdx.className = last.ndx_change > 0 ? "change up" : last.ndx_change < 0 ? "change down" : "change flat";
+  } else {
+    lastAt.textContent = "暂无";
+    lastNdx.textContent = "--";
+    lastNdx.className = "change flat";
+  }
+
+  const previous = compareHistory[0];
+  if (snapshot && previous) {
+    const delta = snapshot.ndx_change - Number(previous.ndx_change);
+    const absDelta = Math.abs(delta);
+    if (absDelta < 0.1) {
+      deltaEl.textContent = "基本持平";
+      deltaEl.className = "agent-tone warn";
+      note.textContent = `本次与上次只差 ${absDelta.toFixed(2)} 个百分点，Agent 判断变化不大。`;
+    } else if (delta > 0) {
+      deltaEl.textContent = `更强 +${delta.toFixed(2)} 点`;
+      deltaEl.className = "agent-tone ok";
+      note.textContent = `本次纳指 100 比上次更强，Agent 会继续观察是否接近 5% 提醒阈值。`;
+    } else {
+      deltaEl.textContent = `走弱 ${delta.toFixed(2)} 点`;
+      deltaEl.className = "agent-tone danger";
+      note.textContent = `本次纳指 100 比上次走弱，Agent 会关注是否继续接近下跌提醒阈值。`;
+    }
+    return;
+  }
+
+  if (snapshot && !previous) {
+    deltaEl.textContent = "首次记录";
+    deltaEl.className = "agent-tone ok";
+    note.textContent = "已经保存第一次 Agent 检查。下次检查时会自动做对比。";
+    return;
+  }
+
+  if (last) {
+    deltaEl.textContent = "等待本次检查";
+    deltaEl.className = "agent-tone warn";
+    note.textContent = "浏览器里已有 Agent 记忆，点击 Agent 检查即可和上次对比。";
+  } else {
+    deltaEl.textContent = "等待检查";
+    deltaEl.className = "agent-tone warn";
+    note.textContent = "点击 Agent 检查后，会把本次结果存在当前浏览器里。";
+  }
+}
+
+function clearAgentMemory() {
+  try {
+    localStorage.removeItem(AGENT_MEMORY_KEY);
+  } catch (error) {
+    // Ignore local storage failures.
+  }
+  renderAgentMemory();
+  setMessage("Agent 记忆已清除。\n\n这只会清除当前浏览器里的 Agent 检查历史，不会影响别人打开网页。下一次点击 Agent 检查会重新开始记录。");
+}
+function renderAgent(items, relativeInsight, options = {}) {
+  const summary = $("agentSummary");
+  if (!summary) return;
+
+  latestAgentItems = items;
+  latestAgentOptions = options;
+  latestRelativeInsight = relativeInsight;
+
+  const ndx = items.find((item) => item.key === "ndx");
+  const spx = items.find((item) => item.key === "spx");
+  const okItems = items.filter((item) => item.ok);
+  const market = getMarketStatus();
+  const sourceText = options.fromCache ? "本机缓存" : "实时/页面数据";
+  const currentSnapshot = getAgentSnapshot(items, relativeInsight, options);
+  renderAgentMemory(currentSnapshot);
+
+  if (!okItems.length || !ndx || !ndx.ok) {
+    summary.textContent = "等待可用行情";
+    summary.className = "change flat";
+    setAgentStep("agentStepData", "还没有拿到 Nasdaq-100 的有效价格。", "warn");
+    setAgentStep("agentStepSignal", "信号不足，暂不判断强弱。", "warn");
+    setAgentStep("agentStepAction", "先点一次实时刷新；如果失败，稍后再试。", "warn");
+    return;
+  }
+
+  const ndxChange = Number(ndx.change_percent);
+  const spxChange = spx && spx.ok ? Number(spx.change_percent) : null;
+  const absChange = Math.abs(ndxChange);
+  const threshold = 5;
+  const distance = Math.max(0, threshold - absChange);
+  const ageText = describeAgentAge(ndx.updated_at);
+  const marketText = market.status;
+
+  setAgentStep(
+    "agentStepData",
+    `${sourceText}已读取：Nasdaq-100 ${fmtSignedPercent(ndxChange)}，${ageText}，当前状态：${marketText}。`,
+    options.fromCache ? "warn" : "ok"
+  );
+
+  if (relativeInsight) {
+    setAgentStep("agentStepSignal", `${relativeInsight.summary}；距离 5% 提醒阈值还差 ${distance.toFixed(2)} 个百分点。`, absChange >= 4 ? "warn" : "ok");
+  } else if (spxChange !== null) {
+    setAgentStep("agentStepSignal", `纳指 ${fmtSignedPercent(ndxChange)}，标普 ${fmtSignedPercent(spxChange)}，正在等待完整强弱判断。`, "warn");
+  } else {
+    setAgentStep("agentStepSignal", `纳指 ${fmtSignedPercent(ndxChange)}，标普数据暂缺。`, "warn");
+  }
+
+  if (absChange >= threshold) {
+    summary.textContent = ndxChange > 0 ? "Agent：已达到上涨提醒区" : "Agent：已达到下跌提醒区";
+    summary.className = `change ${ndxChange > 0 ? "up" : "down"}`;
+    setAgentStep("agentStepAction", "已达到 5% 阈值；如果你本地提醒程序在运行，会按配置发送通知。", ndxChange > 0 ? "ok" : "danger");
+  } else if (absChange >= 4) {
+    summary.textContent = "Agent：接近提醒阈值";
+    summary.className = "change flat";
+    setAgentStep("agentStepAction", "离 5% 阈值很近，可以稍后再刷新一次观察变化。", "warn");
+  } else if (market.status !== "美股交易中") {
+    summary.textContent = "Agent：先看缓存，等开盘";
+    summary.className = "change flat";
+    setAgentStep("agentStepAction", "当前不在常规交易时段，页面可先展示缓存，开盘后再看实时变化。", "warn");
+  } else {
+    summary.textContent = "Agent：正常观察中";
+    summary.className = "change up";
+    setAgentStep("agentStepAction", "当前没有触发 5% 提醒，继续保持自动刷新/手动刷新即可。", "ok");
+  }
+}
+
+function runAgentCheck() {
+  if (!latestAgentItems.length) {
+    setMessage("Agent 暂时没有可检查的数据。请先点击实时刷新，或者等待页面自动读取缓存。");
+    return;
+  }
+
+  const options = { ...latestAgentOptions, manual: true };
+  const snapshot = getAgentSnapshot(latestAgentItems, latestRelativeInsight, options);
+  if (!snapshot) {
+    renderAgent(latestAgentItems, latestRelativeInsight, options);
+    setMessage("Agent 已检查，但当前没有可保存的 Nasdaq-100 有效数据。请稍后再刷新一次。");
+    return;
+  }
+
+  const previousHistory = getAgentMemory();
+  const savedHistory = saveAgentMemoryEntry(snapshot);
+  renderAgent(latestAgentItems, latestRelativeInsight, options);
+  renderAgentMemory(snapshot, savedHistory, previousHistory);
+  setMessage($("messageBox").textContent + "\n\nAgent 已完成检查，并把本次结果保存到当前浏览器记忆里。");
+}
 function renderAll(items, options = {}) {
   const dataByKey = new Map(items.map((item) => [item.key, item]));
   INDICES.forEach((config) => {
@@ -483,6 +692,7 @@ function renderAll(items, options = {}) {
   });
 
   const relativeInsight = renderRelativeInsight(dataByKey);
+  renderAgent(items, relativeInsight, options);
   const okItems = items.filter((item) => item.ok);
   const failedItems = items.filter((item) => !item.ok);
   const status = $("dataStatus");
@@ -574,11 +784,23 @@ async function refreshLive() {
 $("refreshButton").addEventListener("click", refreshLive);
 const clearCacheButton = $("clearCacheButton");
 if (clearCacheButton) clearCacheButton.addEventListener("click", clearLiveCache);
+const agentButton = $("agentButton");
+if (agentButton) agentButton.addEventListener("click", runAgentCheck);
+const clearAgentMemoryButton = $("clearAgentMemoryButton");
+if (clearAgentMemoryButton) clearAgentMemoryButton.addEventListener("click", clearAgentMemory);
+renderAgentMemory();
 renderMarketStatus();
 updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
+
+
+
+
+
+
 
 
 
