@@ -191,6 +191,15 @@
             </div>
           </div>
           <p id="agentMemoryNote" class="hint blue-hint">点击 Agent 检查后，会把本次结果存在当前浏览器里。</p>
+          <div class="agent-timeline">
+            <div class="agent-memory-head compact-head">
+              <span>观察日志</span>
+              <b id="agentTimelineCount">0 条</b>
+            </div>
+            <div id="agentTimelineList" class="agent-timeline-list">
+              <div class="agent-timeline-empty">暂无观察日志。点击 Agent 检查后，这里会显示最近 5 次轨迹。</div>
+            </div>
+          </div>
         </div>        <p class="hint blue-hint">这是规则型 Agent，只做行情状态检查，不做预测或投资建议。</p>
       </article>
       <article class="panel">
@@ -230,6 +239,7 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
 
 

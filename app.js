@@ -527,12 +527,63 @@ function getAgentSnapshot(items, relativeInsight, options = {}) {
   };
 }
 
+function agentToneClass(value) {
+  const number = Number(value);
+  if (number > 0) return "up";
+  if (number < 0) return "down";
+  return "flat";
+}
+
+function describeAgentMomentum(current, previous) {
+  if (!previous) return "首次记录";
+  const delta = Number(current.ndx_change) - Number(previous.ndx_change);
+  const absDelta = Math.abs(delta);
+  if (absDelta < 0.1) return "基本持平";
+  return delta > 0 ? `更强 +${delta.toFixed(2)} 点` : `走弱 ${delta.toFixed(2)} 点`;
+}
+
+function renderAgentTimeline(history = getAgentMemory()) {
+  const list = $("agentTimelineList");
+  const count = $("agentTimelineCount");
+  if (!list || !count) return;
+
+  count.textContent = `${history.length} 条`;
+  if (!history.length) {
+    list.innerHTML = `<div class="agent-timeline-empty">暂无观察日志。点击 Agent 检查后，这里会显示最近 5 次轨迹。</div>`;
+    return;
+  }
+
+  list.innerHTML = history.map((item, index) => {
+    const previous = history[index + 1];
+    const tone = agentToneClass(item.ndx_change);
+    const momentum = describeAgentMomentum(item, previous);
+    const momentumTone = momentum.startsWith("更强") ? "ok" : momentum.startsWith("走弱") ? "danger" : "warn";
+    const market = item.market_status || "市场状态未知";
+    const relative = item.relative_summary || "暂无相对表现";
+    const source = item.source || "页面数据";
+
+    return `
+      <div class="agent-timeline-item">
+        <div class="agent-timeline-dot ${tone}"></div>
+        <div class="agent-timeline-main">
+          <div class="agent-timeline-top">
+            <b>${fmtTime(item.checked_at)}</b>
+            <strong class="change ${tone}">${fmtSignedPercent(item.ndx_change)}</strong>
+          </div>
+          <p>${relative}；${market}；${source}</p>
+          <span class="agent-tone ${momentumTone}">${momentum}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
 function renderAgentMemory(snapshot = null, history = getAgentMemory(), compareHistory = history) {
   const lastAt = $("agentLastCheckAt");
   const lastNdx = $("agentLastNdx");
   const deltaEl = $("agentMemoryDelta");
   const note = $("agentMemoryNote");
   if (!lastAt || !lastNdx || !deltaEl || !note) return;
+  renderAgentTimeline(history);
 
   const last = history[0];
   if (last) {
@@ -676,7 +727,7 @@ function runAgentCheck() {
   const savedHistory = saveAgentMemoryEntry(snapshot);
   renderAgent(latestAgentItems, latestRelativeInsight, options);
   renderAgentMemory(snapshot, savedHistory, previousHistory);
-  setMessage($("messageBox").textContent + "\n\nAgent 已完成检查，并把本次结果保存到当前浏览器记忆里。");
+  setMessage($("messageBox").textContent + "\n\nAgent 已完成检查，并把本次结果保存到当前浏览器记忆里。观察日志会保留最近 5 次记录。");
 }
 function renderAll(items, options = {}) {
   const dataByKey = new Map(items.map((item) => [item.key, item]));
@@ -794,6 +845,7 @@ updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
 
 
 
