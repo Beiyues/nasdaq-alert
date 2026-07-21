@@ -106,7 +106,14 @@
             <strong>-5%</strong>
           </div>
         </div>
-        <p class="hint">这是公开展示页，只负责给别人看；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
+        <div class="browser-notify-box">
+          <div>
+            <span>网页通知</span>
+            <b id="browserNotifyStatus">检测中</b>
+          </div>
+          <button id="enableBrowserNotifyButton" class="secondary-button compact-button" type="button">开启网页通知</button>
+        </div>
+        <p class="hint">这是最小版通知：只在当前浏览器授权后生效；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
       </article>
 
       <article class="panel market-panel">
@@ -239,6 +246,7 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
 
 

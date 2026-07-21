@@ -1,6 +1,8 @@
 ﻿const $ = (id) => document.getElementById(id);
 const LIVE_CACHE_KEY = "nasdaq-alert-live-data-v2";
 const AGENT_MEMORY_KEY = "nasdaq-alert-agent-memory-v1";
+const BROWSER_NOTIFY_KEY = "nasdaq-alert-browser-notify-v1";
+const BROWSER_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 8000;
 let latestAgentItems = [];
 let latestAgentOptions = {};
@@ -51,6 +53,107 @@ function fmtTime(value) {
 
 function setMessage(text) {
   $("messageBox").textContent = text;
+}
+function getBrowserNotifyState() {
+  try {
+    const raw = localStorage.getItem(BROWSER_NOTIFY_KEY);
+    return raw ? JSON.parse(raw) : { enabled: false, last_up_at: null, last_down_at: null };
+  } catch (error) {
+    return { enabled: false, last_up_at: null, last_down_at: null };
+  }
+}
+
+function saveBrowserNotifyState(state) {
+  try {
+    localStorage.setItem(BROWSER_NOTIFY_KEY, JSON.stringify(state));
+  } catch (error) {
+    // Ignore local storage failures.
+  }
+}
+
+function updateBrowserNotifyStatus() {
+  const status = $("browserNotifyStatus");
+  const button = $("enableBrowserNotifyButton");
+  if (!status || !button) return;
+
+  if (!("Notification" in window)) {
+    status.textContent = "当前浏览器不支持";
+    button.disabled = true;
+    return;
+  }
+
+  const state = getBrowserNotifyState();
+  if (Notification.permission === "granted" && state.enabled) {
+    status.textContent = "已开启";
+    button.textContent = "已开启网页通知";
+    button.disabled = true;
+  } else if (Notification.permission === "denied") {
+    status.textContent = "浏览器已拒绝";
+    button.textContent = "已被浏览器拒绝";
+    button.disabled = true;
+  } else {
+    status.textContent = "未开启";
+    button.textContent = "开启网页通知";
+    button.disabled = false;
+  }
+}
+
+async function enableBrowserNotifications() {
+  if (!("Notification" in window)) {
+    setMessage("当前浏览器不支持网页通知。\n\n你仍然可以使用页面内的 Agent 检查和观察日志。");
+    updateBrowserNotifyStatus();
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  const state = getBrowserNotifyState();
+  state.enabled = permission === "granted";
+  saveBrowserNotifyState(state);
+  updateBrowserNotifyStatus();
+
+  if (permission === "granted") {
+    new Notification("Nasdaq-100 提醒已开启", {
+      body: "网页通知只在当前浏览器授权后生效；达到 ±5% 阈值时会提醒。"
+    });
+    setMessage("网页通知已开启。\n\n当页面实时刷新发现 Nasdaq-100 达到 +5% 或 -5% 阈值时，会发送浏览器通知。");
+  } else {
+    setMessage("网页通知没有开启。\n\n如果你点了拒绝，需要在浏览器的网站权限里重新允许通知。");
+  }
+}
+
+function canSendBrowserNotification(direction) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  const state = getBrowserNotifyState();
+  if (!state.enabled) return false;
+
+  const key = direction === "up" ? "last_up_at" : "last_down_at";
+  const lastAt = state[key] ? new Date(state[key]).getTime() : 0;
+  return Date.now() - lastAt > BROWSER_NOTIFY_COOLDOWN_MS;
+}
+
+function markBrowserNotificationSent(direction) {
+  const state = getBrowserNotifyState();
+  const key = direction === "up" ? "last_up_at" : "last_down_at";
+  state[key] = new Date().toISOString();
+  state.enabled = true;
+  saveBrowserNotifyState(state);
+}
+
+function maybeSendBrowserAlert(items, options = {}) {
+  if (!options.allowNotify) return;
+  const ndx = items.find((item) => item.key === "ndx");
+  if (!ndx || !ndx.ok || Number.isNaN(Number(ndx.change_percent))) return;
+
+  const change = Number(ndx.change_percent);
+  const direction = change >= 5 ? "up" : change <= -5 ? "down" : null;
+  if (!direction || !canSendBrowserNotification(direction)) return;
+
+  const title = direction === "up"
+    ? `Nasdaq-100 涨幅提醒：${fmtSignedPercent(change)}`
+    : `Nasdaq-100 跌幅提醒：${fmtSignedPercent(change)}`;
+  const body = `当前价格 ${fmtNumber(ndx.current_price)}，昨日收盘 ${fmtNumber(ndx.previous_close)}。仅供行情提醒，不构成投资建议。`;
+  new Notification(title, { body });
+  markBrowserNotificationSent(direction);
 }
 function getLiveCache() {
   try {
@@ -743,6 +846,7 @@ function renderAll(items, options = {}) {
   });
 
   const relativeInsight = renderRelativeInsight(dataByKey);
+  maybeSendBrowserAlert(items, options);
   renderAgent(items, relativeInsight, options);
   const okItems = items.filter((item) => item.ok);
   const failedItems = items.filter((item) => !item.ok);
@@ -819,7 +923,7 @@ async function refreshLive() {
     const startedAt = performance.now();
     const data = await fetchLiveData();
     saveLiveCache(data);
-    renderAll(data);
+    renderAll(data, { allowNotify: true });
     const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
     setMessage($("messageBox").textContent + `\n\n刷新耗时：${elapsedSeconds} 秒。`);
   } catch (error) {
@@ -833,6 +937,8 @@ async function refreshLive() {
 }
 
 $("refreshButton").addEventListener("click", refreshLive);
+const enableBrowserNotifyButton = $("enableBrowserNotifyButton");
+if (enableBrowserNotifyButton) enableBrowserNotifyButton.addEventListener("click", enableBrowserNotifications);
 const clearCacheButton = $("clearCacheButton");
 if (clearCacheButton) clearCacheButton.addEventListener("click", clearLiveCache);
 const agentButton = $("agentButton");
@@ -845,6 +951,7 @@ updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
 
 
 
