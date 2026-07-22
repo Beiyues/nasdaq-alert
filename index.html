@@ -209,6 +209,25 @@
           </div>
         </div>        <p class="hint blue-hint">这是规则型 Agent，只做行情状态检查，不做预测或投资建议。</p>
       </article>
+      <article class="panel trace-panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Agent Trace</p>
+            <h2 id="traceSummary">等待追踪</h2>
+          </div>
+          <span id="traceId" class="mini-badge">trace --</span>
+        </div>
+        <div class="trace-meta">
+          <div><span>触发来源</span><b id="traceTrigger">--</b></div>
+          <div><span>运行状态</span><b id="traceStatus">等待</b></div>
+          <div><span>总耗时</span><b id="traceDuration">--</b></div>
+        </div>
+        <div id="traceSteps" class="trace-steps">
+          <div class="trace-empty">刷新或点击 Agent 检查后，这里会显示每一步做了什么。</div>
+        </div>
+        <p class="hint blue-hint">这是最小版 Agent 可观测性：记录每次观察、判断、通知的步骤和耗时。</p>
+      </article>
+
       <article class="panel">
         <p class="label">数据源</p>
         <div class="channels">
@@ -246,6 +265,8 @@
   <script src="app.js"></script>
 </body>
 </html>
+
+
 
 
 

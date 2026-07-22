@@ -7,6 +7,7 @@ const FETCH_TIMEOUT_MS = 8000;
 let latestAgentItems = [];
 let latestAgentOptions = {};
 let latestRelativeInsight = null;
+let latestAgentTrace = null;
 
 const INDICES = [
   {
@@ -23,6 +24,108 @@ const INDICES = [
   }
 ];
 
+function makeTraceId() {
+  return "trace-" + Date.now().toString(36) + "-" + Math.random().toString(16).slice(2, 6);
+}
+
+function startAgentTrace(trigger) {
+  latestAgentTrace = {
+    id: makeTraceId(),
+    trigger,
+    status: "running",
+    summary: "Agent 正在观察",
+    started_at: new Date().toISOString(),
+    started_ms: performance.now(),
+    duration_ms: null,
+    steps: []
+  };
+  renderAgentTrace(latestAgentTrace);
+  return latestAgentTrace;
+}
+
+function addTraceStep(trace, name, status = "success", detail = "", durationMs = 0) {
+  if (!trace) return;
+  trace.steps.push({
+    name,
+    status,
+    detail,
+    duration_ms: Math.max(0, Math.round(durationMs)),
+    at: new Date().toISOString()
+  });
+  renderAgentTrace(trace);
+}
+
+function finishAgentTrace(trace, status = "success", summary = "Agent 检查完成") {
+  if (!trace) return;
+  trace.status = status;
+  trace.summary = summary;
+  trace.duration_ms = Math.max(0, Math.round(performance.now() - trace.started_ms));
+  renderAgentTrace(trace);
+}
+
+function traceStatusLabel(status) {
+  if (status === "running") return "运行中";
+  if (status === "success") return "成功";
+  if (status === "warning") return "部分成功";
+  if (status === "error") return "失败";
+  if (status === "skipped") return "跳过";
+  return status || "未知";
+}
+
+function traceTriggerLabel(trigger) {
+  const labels = {
+    live_refresh: "实时刷新",
+    browser_cache: "浏览器缓存",
+    page_data: "页面数据",
+    agent_check: "Agent 检查"
+  };
+  return labels[trigger] || trigger || "--";
+}
+
+function renderAgentTrace(trace = latestAgentTrace) {
+  const summary = $("traceSummary");
+  const id = $("traceId");
+  const trigger = $("traceTrigger");
+  const status = $("traceStatus");
+  const duration = $("traceDuration");
+  const steps = $("traceSteps");
+  if (!summary || !id || !trigger || !status || !duration || !steps) return;
+
+  if (!trace) {
+    summary.textContent = "等待追踪";
+    id.textContent = "trace --";
+    trigger.textContent = "--";
+    status.textContent = "等待";
+    duration.textContent = "--";
+    steps.innerHTML = `<div class="trace-empty">刷新或点击 Agent 检查后，这里会显示每一步做了什么。</div>`;
+    return;
+  }
+
+  summary.textContent = trace.summary || "Agent Trace";
+  id.textContent = trace.id.replace("trace-", "#");
+  trigger.textContent = traceTriggerLabel(trace.trigger);
+  status.textContent = traceStatusLabel(trace.status);
+  status.className = `trace-status ${trace.status}`;
+  duration.textContent = trace.duration_ms === null ? "运行中" : `${trace.duration_ms} ms`;
+
+  if (!trace.steps.length) {
+    steps.innerHTML = `<div class="trace-empty">Trace 已创建，等待步骤写入。</div>`;
+    return;
+  }
+
+  steps.innerHTML = trace.steps.map((step, index) => `
+    <div class="trace-step ${step.status}">
+      <span>${index + 1}</span>
+      <div>
+        <div class="trace-step-top">
+          <b>${step.name}</b>
+          <em>${traceStatusLabel(step.status)} · ${step.duration_ms} ms</em>
+        </div>
+        <p>${step.detail || "--"}</p>
+      </div>
+    </div>
+  `).join("");
+}
 function yahooUrl(symbol) {
   return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
 }
@@ -140,13 +243,14 @@ function markBrowserNotificationSent(direction) {
 }
 
 function maybeSendBrowserAlert(items, options = {}) {
-  if (!options.allowNotify) return;
+  if (!options.allowNotify) return "disabled";
   const ndx = items.find((item) => item.key === "ndx");
-  if (!ndx || !ndx.ok || Number.isNaN(Number(ndx.change_percent))) return;
+  if (!ndx || !ndx.ok || Number.isNaN(Number(ndx.change_percent))) return "no_valid_data";
 
   const change = Number(ndx.change_percent);
   const direction = change >= 5 ? "up" : change <= -5 ? "down" : null;
-  if (!direction || !canSendBrowserNotification(direction)) return;
+  if (!direction) return "below_threshold";
+  if (!canSendBrowserNotification(direction)) return "permission_or_cooldown";
 
   const title = direction === "up"
     ? `Nasdaq-100 涨幅提醒：${fmtSignedPercent(change)}`
@@ -154,6 +258,7 @@ function maybeSendBrowserAlert(items, options = {}) {
   const body = `当前价格 ${fmtNumber(ndx.current_price)}，昨日收盘 ${fmtNumber(ndx.previous_close)}。仅供行情提醒，不构成投资建议。`;
   new Notification(title, { body });
   markBrowserNotificationSent(direction);
+  return "sent";
 }
 function getLiveCache() {
   try {
@@ -220,7 +325,10 @@ function loadLiveCache() {
   try {
     const cached = getLiveCache();
     if (!cached || !Array.isArray(cached.indices) || !cached.indices.length) return false;
-    renderAll(cached.indices, { fromCache: true, savedAt: cached.saved_at });
+    const trace = startAgentTrace("browser_cache");
+    addTraceStep(trace, "读取浏览器缓存", "success", `读取到 ${cached.indices.length} 个指数的本机缓存。`, 1);
+    renderAll(cached.indices, { fromCache: true, savedAt: cached.saved_at, trace });
+    finishAgentTrace(trace, "success", "已先显示浏览器缓存");
     updateCacheStatus("loaded", cached.saved_at);
     return true;
   } catch (error) {
@@ -743,7 +851,8 @@ function clearAgentMemory() {
   } catch (error) {
     // Ignore local storage failures.
   }
-  renderAgentMemory();
+  renderAgentTrace();
+renderAgentMemory();
   setMessage("Agent 记忆已清除。\n\n这只会清除当前浏览器里的 Agent 检查历史，不会影响别人打开网页。下一次点击 Agent 检查会重新开始记录。");
 }
 function renderAgent(items, relativeInsight, options = {}) {
@@ -813,23 +922,32 @@ function renderAgent(items, relativeInsight, options = {}) {
 }
 
 function runAgentCheck() {
+  const trace = startAgentTrace("agent_check");
   if (!latestAgentItems.length) {
+    addTraceStep(trace, "检查输入数据", "error", "页面还没有可检查的数据。", 0);
+    finishAgentTrace(trace, "error", "Agent 检查失败");
     setMessage("Agent 暂时没有可检查的数据。请先点击实时刷新，或者等待页面自动读取缓存。");
     return;
   }
 
-  const options = { ...latestAgentOptions, manual: true };
+  const options = { ...latestAgentOptions, manual: true, trace };
+  const snapshotStartedAt = performance.now();
   const snapshot = getAgentSnapshot(latestAgentItems, latestRelativeInsight, options);
+  addTraceStep(trace, "生成 Agent 快照", snapshot ? "success" : "error", snapshot ? "已生成本次 Nasdaq-100 观察快照。" : "当前没有可保存的 Nasdaq-100 有效数据。", performance.now() - snapshotStartedAt);
   if (!snapshot) {
     renderAgent(latestAgentItems, latestRelativeInsight, options);
+    finishAgentTrace(trace, "error", "Agent 检查无有效数据");
     setMessage("Agent 已检查，但当前没有可保存的 Nasdaq-100 有效数据。请稍后再刷新一次。");
     return;
   }
 
+  const memoryStartedAt = performance.now();
   const previousHistory = getAgentMemory();
   const savedHistory = saveAgentMemoryEntry(snapshot);
+  addTraceStep(trace, "保存 Agent 记忆", "success", `已保存到浏览器记忆，当前共 ${savedHistory.length} 条。`, performance.now() - memoryStartedAt);
   renderAgent(latestAgentItems, latestRelativeInsight, options);
   renderAgentMemory(snapshot, savedHistory, previousHistory);
+  finishAgentTrace(trace, "success", "Agent 检查 Trace 完成");
   setMessage($("messageBox").textContent + "\n\nAgent 已完成检查，并把本次结果保存到当前浏览器记忆里。观察日志会保留最近 5 次记录。");
 }
 function renderAll(items, options = {}) {
@@ -845,9 +963,28 @@ function renderAll(items, options = {}) {
     renderIndex(data);
   });
 
+  const trace = options.trace;
+  const relativeStartedAt = performance.now();
   const relativeInsight = renderRelativeInsight(dataByKey);
-  maybeSendBrowserAlert(items, options);
+  if (trace) addTraceStep(trace, "计算相对表现", relativeInsight ? "success" : "skipped", relativeInsight ? relativeInsight.summary : "缺少完整指数数据，跳过强弱判断。", performance.now() - relativeStartedAt);
+
+  const notifyStartedAt = performance.now();
+  const notifyResult = maybeSendBrowserAlert(items, options);
+  if (trace) {
+    const notifyStatus = notifyResult === "sent" ? "success" : "skipped";
+    const notifyDetails = {
+      sent: "已发送网页通知。",
+      disabled: "本次不是通知型刷新，跳过网页通知。",
+      no_valid_data: "没有可用于通知判断的 Nasdaq-100 数据。",
+      below_threshold: "未达到 ±5% 阈值，不发送通知。",
+      permission_or_cooldown: "未授权通知或仍在冷却时间内。"
+    };
+    addTraceStep(trace, "判断网页通知", notifyStatus, notifyDetails[notifyResult] || "通知判断完成。", performance.now() - notifyStartedAt);
+  }
+
+  const agentStartedAt = performance.now();
   renderAgent(items, relativeInsight, options);
+  if (trace) addTraceStep(trace, "运行规则 Agent", "success", $("agentSummary").textContent || "Agent 判断完成。", performance.now() - agentStartedAt);
   const okItems = items.filter((item) => item.ok);
   const failedItems = items.filter((item) => !item.ok);
   const status = $("dataStatus");
@@ -890,24 +1027,34 @@ function renderLegacyCachedData(data) {
 }
 
 async function loadCachedData() {
+  const trace = startAgentTrace("page_data");
+  const startedAt = performance.now();
   try {
     const response = await fetch("data.json?ts=" + Date.now(), { cache: "no-store" });
     const data = await response.json();
-    if (Array.isArray(data.indices)) renderAll(data.indices);
-    else if (data.indices && typeof data.indices === "object") renderAll(Object.values(data.indices));
-    else renderLegacyCachedData(data);
+    addTraceStep(trace, "读取页面 data.json", "success", "已读取 GitHub Pages 上的静态数据文件。", performance.now() - startedAt);
+    if (Array.isArray(data.indices)) renderAll(data.indices, { trace });
+    else if (data.indices && typeof data.indices === "object") renderAll(Object.values(data.indices), { trace });
+    else {
+      renderLegacyCachedData(data);
+      addTraceStep(trace, "兼容旧数据格式", "warning", "data.json 是旧格式，只渲染 Nasdaq-100。", 1);
+    }
+    finishAgentTrace(trace, "success", "页面数据 Trace 完成");
   } catch (error) {
+    addTraceStep(trace, "读取页面 data.json", "error", error.message, performance.now() - startedAt);
     renderAll(INDICES.map((config) => ({
       ok: false,
       key: config.key,
       symbol: config.symbol,
       display_symbol: config.displaySymbol,
       error: "本地缓存 data.json 读取失败：" + error.message
-    })));
+    })), { trace });
+    finishAgentTrace(trace, "error", "页面数据读取失败");
   }
 }
 
 async function refreshLive() {
+  const trace = startAgentTrace("live_refresh");
   const button = $("refreshButton");
   button.disabled = true;
   button.textContent = "刷新中...";
@@ -918,15 +1065,22 @@ async function refreshLive() {
     badge.className = "mini-badge warn";
   });
   setMessage("正在实时请求 Nasdaq-100 和 S&P 500 数据，请稍等...");
+  addTraceStep(trace, "创建刷新任务", "success", "用户或页面触发实时刷新。", 0);
 
   try {
     const startedAt = performance.now();
     const data = await fetchLiveData();
+    addTraceStep(trace, "请求行情接口", "success", `返回 ${data.filter((item) => item.ok).length}/${data.length} 个有效指数。`, performance.now() - startedAt);
+    const cacheStartedAt = performance.now();
     saveLiveCache(data);
-    renderAll(data, { allowNotify: true });
+    addTraceStep(trace, "写入浏览器缓存", "success", "把本次有效数据保存到当前浏览器。", performance.now() - cacheStartedAt);
+    renderAll(data, { allowNotify: true, trace });
     const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+    finishAgentTrace(trace, "success", "实时刷新 Trace 完成");
     setMessage($("messageBox").textContent + `\n\n刷新耗时：${elapsedSeconds} 秒。`);
   } catch (error) {
+    addTraceStep(trace, "请求行情接口", "error", error.message, 0);
+    finishAgentTrace(trace, "error", "实时刷新失败");
     setMessage("实时刷新失败：" + error.message + "\n\n我会保留页面上的缓存数据。你可以稍后再点一次刷新。");
     $("dataStatus").textContent = "刷新失败";
     $("dataStatus").classList.add("warn");
@@ -945,12 +1099,16 @@ const agentButton = $("agentButton");
 if (agentButton) agentButton.addEventListener("click", runAgentCheck);
 const clearAgentMemoryButton = $("clearAgentMemoryButton");
 if (clearAgentMemoryButton) clearAgentMemoryButton.addEventListener("click", clearAgentMemory);
+renderAgentTrace();
 renderAgentMemory();
 renderMarketStatus();
 updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
+
+
 
 
 

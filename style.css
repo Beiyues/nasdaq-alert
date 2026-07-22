@@ -135,6 +135,105 @@ button:disabled {
 }
 
 
+.trace-panel {
+  grid-column: span 1;
+}
+
+.trace-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.trace-meta > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.trace-meta span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.trace-meta b {
+  font-size: 14px;
+}
+
+.trace-status.success { color: var(--green); }
+.trace-status.warning, .trace-status.running, .trace-status.skipped { color: var(--amber); }
+.trace-status.error { color: var(--red); }
+
+.trace-steps {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.trace-empty {
+  padding: 12px;
+  border: 1px dashed #c7d7fe;
+  border-radius: 8px;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.trace-step {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.trace-step > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trace-step.success > span { background: #e8f6ef; color: var(--green); }
+.trace-step.warning > span, .trace-step.skipped > span { background: #fff8e5; color: var(--amber); }
+.trace-step.error > span { background: #fff1f2; color: var(--red); }
+
+.trace-step-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.trace-step-top b {
+  font-size: 14px;
+}
+
+.trace-step-top em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.trace-step p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
 .browser-notify-box {
   display: flex;
   justify-content: space-between;
@@ -638,16 +737,17 @@ strong {
 
 @media (max-width: 780px) {
   .hero, .panel-head, .browser-notify-box { flex-direction: column; }
-  .price-row, .thresholds, .relative-grid, .agent-memory-grid { grid-template-columns: 1fr; }
-  .agent-timeline-top { flex-direction: column; align-items: flex-start; }
+  .price-row, .thresholds, .relative-grid, .agent-memory-grid, .trace-meta { grid-template-columns: 1fr; }
+  .agent-timeline-top, .trace-step-top { flex-direction: column; align-items: flex-start; }
   .status-pill, .browser-notify-box .compact-button { align-self: flex-start; }
 }
-
 @media (max-width: 520px) {
   .index-head { flex-direction: column; }
   .mini-badge { align-self: flex-start; }
   strong { font-size: 24px; }
 }
+
+
 
 
 
