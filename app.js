@@ -176,28 +176,38 @@ function saveBrowserNotifyState(state) {
 
 function updateBrowserNotifyStatus() {
   const status = $("browserNotifyStatus");
-  const button = $("enableBrowserNotifyButton");
-  if (!status || !button) return;
+  const enableButton = $("enableBrowserNotifyButton");
+  const disableButton = $("disableBrowserNotifyButton");
+  if (!status || !enableButton) return;
 
   if (!("Notification" in window)) {
     status.textContent = "当前浏览器不支持";
-    button.disabled = true;
+    enableButton.disabled = true;
+    if (disableButton) disableButton.disabled = true;
     return;
   }
 
   const state = getBrowserNotifyState();
   if (Notification.permission === "granted" && state.enabled) {
     status.textContent = "已开启";
-    button.textContent = "已开启网页通知";
-    button.disabled = true;
+    enableButton.textContent = "已开启网页通知";
+    enableButton.disabled = true;
+    if (disableButton) disableButton.disabled = false;
   } else if (Notification.permission === "denied") {
     status.textContent = "浏览器已拒绝";
-    button.textContent = "已被浏览器拒绝";
-    button.disabled = true;
+    enableButton.textContent = "已被浏览器拒绝";
+    enableButton.disabled = true;
+    if (disableButton) disableButton.disabled = true;
+  } else if (Notification.permission === "granted" && !state.enabled) {
+    status.textContent = "已关闭";
+    enableButton.textContent = "重新开启网页通知";
+    enableButton.disabled = false;
+    if (disableButton) disableButton.disabled = true;
   } else {
     status.textContent = "未开启";
-    button.textContent = "开启网页通知";
-    button.disabled = false;
+    enableButton.textContent = "开启网页通知";
+    enableButton.disabled = false;
+    if (disableButton) disableButton.disabled = true;
   }
 }
 
@@ -224,6 +234,13 @@ async function enableBrowserNotifications() {
   }
 }
 
+function disableBrowserNotifications() {
+  const state = getBrowserNotifyState();
+  state.enabled = false;
+  saveBrowserNotifyState(state);
+  updateBrowserNotifyStatus();
+  setMessage("网页通知已关闭。\n\n这只会关闭本网站在当前浏览器里的通知开关；浏览器系统权限不会被网页自动撤销。以后想恢复，点击重新开启网页通知即可。");
+}
 function canSendBrowserNotification(direction) {
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
   const state = getBrowserNotifyState();
@@ -977,6 +994,7 @@ function renderAll(items, options = {}) {
       disabled: "本次不是通知型刷新，跳过网页通知。",
       no_valid_data: "没有可用于通知判断的 Nasdaq-100 数据。",
       below_threshold: "未达到 ±5% 阈值，不发送通知。",
+      disabled_by_user: "用户已关闭网页通知。",
       permission_or_cooldown: "未授权通知或仍在冷却时间内。"
     };
     addTraceStep(trace, "判断网页通知", notifyStatus, notifyDetails[notifyResult] || "通知判断完成。", performance.now() - notifyStartedAt);
@@ -1093,6 +1111,8 @@ async function refreshLive() {
 $("refreshButton").addEventListener("click", refreshLive);
 const enableBrowserNotifyButton = $("enableBrowserNotifyButton");
 if (enableBrowserNotifyButton) enableBrowserNotifyButton.addEventListener("click", enableBrowserNotifications);
+const disableBrowserNotifyButton = $("disableBrowserNotifyButton");
+if (disableBrowserNotifyButton) disableBrowserNotifyButton.addEventListener("click", disableBrowserNotifications);
 const clearCacheButton = $("clearCacheButton");
 if (clearCacheButton) clearCacheButton.addEventListener("click", clearLiveCache);
 const agentButton = $("agentButton");
@@ -1106,6 +1126,8 @@ updateCacheStatus();
 setInterval(renderMarketStatus, 60000);
 if (!loadLiveCache()) loadCachedData();
 setTimeout(refreshLive, 80);
+
+
 
 
 

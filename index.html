@@ -111,9 +111,12 @@
             <span>网页通知</span>
             <b id="browserNotifyStatus">检测中</b>
           </div>
-          <button id="enableBrowserNotifyButton" class="secondary-button compact-button" type="button">开启网页通知</button>
+          <div class="browser-notify-actions">
+            <button id="enableBrowserNotifyButton" class="secondary-button compact-button" type="button">开启网页通知</button>
+            <button id="disableBrowserNotifyButton" class="ghost-button compact-button" type="button">关闭网页通知</button>
+          </div>
         </div>
-        <p class="hint">这是最小版通知：只在当前浏览器授权后生效；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
+        <p class="hint">这是最小版通知：开启/关闭只保存在当前浏览器；邮件/微信/短信/电话提醒仍由你本地程序负责。</p>
       </article>
 
       <article class="panel market-panel">
@@ -265,6 +268,7 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
 
 

@@ -246,6 +246,19 @@ button:disabled {
   background: #f7faff;
 }
 
+.browser-notify-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.browser-notify-actions .ghost-button:disabled,
+.browser-notify-actions .secondary-button:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
 .browser-notify-box span {
   display: block;
   color: var(--muted);
@@ -739,6 +752,7 @@ strong {
   .hero, .panel-head, .browser-notify-box { flex-direction: column; }
   .price-row, .thresholds, .relative-grid, .agent-memory-grid, .trace-meta { grid-template-columns: 1fr; }
   .agent-timeline-top, .trace-step-top { flex-direction: column; align-items: flex-start; }
+  .browser-notify-actions { justify-content: flex-start; }
   .status-pill, .browser-notify-box .compact-button { align-self: flex-start; }
 }
 @media (max-width: 520px) {
@@ -746,6 +760,7 @@ strong {
   .mini-badge { align-self: flex-start; }
   strong { font-size: 24px; }
 }
+
 
 
 
